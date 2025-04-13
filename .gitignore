@@ -24,3 +24,6 @@ app_data_host/
 
 # Build/install artifacts
 *.egg-info/
+
+# Custom Exclusions
+.cursor/
