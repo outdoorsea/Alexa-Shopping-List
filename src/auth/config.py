@@ -1,10 +1,6 @@
 # Configuration for the Auth (Login) Script
 import logging
 
-# --- User Credentials (Edit these) ---
-AMAZON_EMAIL = "your_email@example.com"  # CHANGE THIS
-AMAZON_PASSWORD = "your_password"        # CHANGE THIS
-
 # Amazon URL for your locale (e.g., amazon.com, amazon.co.uk)
 AMAZON_URL = "https://www.amazon.com"
 

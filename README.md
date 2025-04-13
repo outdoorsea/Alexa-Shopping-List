@@ -97,3 +97,34 @@ You should see a JSON response containing your current Alexa shopping list items
     - API Connection Error: Ensure API container is running and reachable (check `src/auth/config.py`). Check `docker compose logs alexa_api`.
     - Login Failures: Verify credentials in `src/auth/config.py`. Check for unexpected page changes or Captcha/2FA prompts mentioned in logs or screenshots. Amazon might change selectors (`#ap_email`, `#signInSubmit`, etc.).
 - **Tool Errors (401 Unauthorized):** Login failed or cookies expired. Rerun the login script (`python -m src.auth.login`). Ensure credentials in `src/auth/config.py` are correct and check `auth` logs for any 2FA/Captcha issues during the last run.
+
+## Connecting an MCP Client (Claude Desktop / Cursor)
+
+To use this server with an MCP client like Claude Desktop or Cursor, you need to add its configuration to your client's `mcp.json` file. This file tells the client how to find and run your local MCP server.
+
+1.  Locate your MCP client's configuration file (often named `mcp.json`). The location varies depending on the client.
+2.  Open the file and add the following entry within the main `"mcpServers": { ... }` object:
+
+```json
+    "alexa-shopping-list": {
+        "displayName": "Alexa Shopping List MCP",
+        "description": "MCP Server for interacting with Alexa shopping list via local API",
+        "command": "/path/to/your/alexa-mcp/.venv/bin/python",
+        "args": [
+          "-m",
+          "src.mcp.mcp_server"
+        ],
+        "workingDirectory": "/path/to/your/alexa-mcp",
+        "env": {
+          "PYTHONPATH": "/path/to/your/alexa-mcp"
+        }
+    }
+```
+
+**IMPORTANT:**
+
+*   You **MUST** replace the placeholder absolute paths `/path/to/your/alexa-mcp` in the `command`, `workingDirectory`, and `env.PYTHONPATH` fields with the actual absolute path to **your** project directory on your machine.
+*   Ensure the `.venv` virtual environment exists at that location and has the MCP dependencies installed (`uv pip install -r src/mcp/requirements.txt`).
+
+3.  Save the `mcp.json` file.
+4.  Restart your MCP client. The "Alexa Shopping List MCP" server should now be available.

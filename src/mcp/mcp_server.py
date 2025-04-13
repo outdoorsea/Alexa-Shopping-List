@@ -5,10 +5,15 @@ import logging
 import requests  # For making API calls
 import json
 from typing import List, Dict, Any, Optional, Union
+from pathlib import Path
 
 # --- Path Modification ---
 # No longer needed as we read API_PORT directly from env
 # --- End Path Modification ---
+
+# --- Setup Project Root ---
+# REMOVED File Logging Setup
+# --- End Setup ---
 
 # Import the local config
 try:
@@ -24,6 +29,11 @@ from fastmcp import FastMCP
 logging.basicConfig(level=mcp_config.LOG_LEVEL_INT, format='%(asctime)s - %(name)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
+# --- Add File Handler ---
+# Create file handler which logs even debug messages
+# REMOVED File Handler Setup
+# --- End File Handler Setup ---
+
 # API server configuration
 # Use base URL directly from local config
 API_BASE_URL = mcp_config.API_BASE_URL
@@ -36,8 +46,12 @@ if mcp_config.LOG_LEVEL_INT > logging.DEBUG:
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logger.debug("Suppressed noisy library logs.")
 
+print("--- DEBUG: Initializing FastMCP server...", file=sys.stderr)
+
 # --- FastMCP Server Instance ---
 mcp = FastMCP("Alexa Shopping List")
+
+print("--- DEBUG: FastMCP server instance created.", file=sys.stderr)
 
 # --- Helper Functions ---
 def make_api_request(method: str, endpoint: str, json_data: Optional[Dict] = None) -> Dict:
@@ -356,33 +370,20 @@ def check_api_status() -> dict:
 
 # --- Run Server ---
 if __name__ == "__main__":
+    print("--- DEBUG: Entering __main__ block.", file=sys.stderr)
     logger.info("Starting FastMCP server...")
     print("--- MCP Server: Starting ---", file=sys.stderr); sys.stderr.flush()
 
     # Initial API health check with added error handling
-    try:
-        print("--- MCP Server: Performing initial API health check... ---", file=sys.stderr); sys.stderr.flush()
-        status = check_api_status()
-        if status.get("status") == "ERROR":
-            logger.warning(f"WARNING: {status.get('message')}. Some tools may not work correctly.")
-            print(f"--- MCP Server WARNING: FastAPI server not accessible during initial check: {status.get('message')} ---", file=sys.stderr)
-            sys.stderr.flush()
-        else:
-            print("--- MCP Server: Initial API health check successful. ---", file=sys.stderr); sys.stderr.flush()
-    except Exception as initial_check_error:
-        # Catch any unexpected error during the initial check itself
-        print(f"--- MCP Server FATAL ERROR during initial API check: {initial_check_error} ---", file=sys.stderr)
-        logger.exception(f"Fatal error during initial API status check: {initial_check_error}")
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        sys.stderr.flush()
-        # Optionally, decide whether to exit here or let mcp.run() potentially fail later
-        # For now, we'll log the error and continue to mcp.run()
-        print("--- MCP Server: Proceeding to mcp.run() despite initial check error. ---", file=sys.stderr); sys.stderr.flush()
+    # --- TEMPORARILY DISABLED Initial API Health Check for Debugging Startup ---
+    print("--- MCP Server: Skipping initial API health check... ---", file=sys.stderr); sys.stderr.flush()
+    # --- End Disabled Check ---
 
     try:
+        print("--- DEBUG: Calling mcp.run()...", file=sys.stderr)
         print("--- MCP Server: Entering mcp.run() ---", file=sys.stderr); sys.stderr.flush()
         mcp.run()
+        print("--- DEBUG: mcp.run() completed (or exited).", file=sys.stderr)
     except Exception as e:
         print(f"--- MCP Server FATAL ERROR: Exception from mcp.run(): {e} ---", file=sys.stderr)
         logger.exception(f"Exception from mcp.run(): {e}")  # Log with traceback via logger
@@ -393,3 +394,4 @@ if __name__ == "__main__":
     finally:
         print("--- MCP Server: mcp.run() exited ---", file=sys.stderr); sys.stderr.flush()
         logger.info("FastMCP server finished.")
+    print("--- DEBUG: Exiting __main__ block normally.", file=sys.stderr)

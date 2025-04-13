@@ -58,10 +58,6 @@ async def main():
 
     logger.info("Starting Alexa authentication process with nodriver...")
 
-    if auth_config.AMAZON_EMAIL == "your_email@example.com" or auth_config.AMAZON_PASSWORD == "your_password":
-        logger.error("Please update AMAZON_EMAIL and AMAZON_PASSWORD in src/auth/config.py")
-        sys.exit(1)
-
     browser = None
     page = None
 
