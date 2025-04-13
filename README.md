@@ -1,9 +1,10 @@
-# Alexa Shopping List FastAPI + MCP Server
+# Alexa Shopping List API (Dockerized) + MCP Server
 
-This project allows an LLM (like Claude) to interact with your Alexa shopping list via the Model Context Protocol (MCP). It uses a two-part architecture:
+This project allows an LLM (like Claude) to interact with your Alexa shopping list via the Model Context Protocol (MCP). It uses a containerized FastAPI backend and a local MCP server.
 
-1.  **FastAPI Server (`src/api/main.py`):** Handles direct interaction with the Alexa API, including authentication using saved cookies.
-2.  **MCP Server (`src/mcp/mcp_server.py`):** Acts as a proxy, exposing tools via MCP that forward requests to the running FastAPI server.
+1.  **FastAPI Server (Docker Container - `src/api/main.py`):** Runs inside a Docker container. Handles interaction with the Alexa API using cookies injected via an endpoint.
+2.  **MCP Server (`src/mcp/mcp_server.py`):** Runs locally. Acts as a proxy, exposing tools via MCP that forward requests to the running Dockerized FastAPI server.
+3.  **Login Script (`src/mcp/login.py`):** Runs locally. Uses Selenium to handle Amazon login and then sends the generated cookies to the FastAPI container via its `/auth/cookies` endpoint.
 
 ## Features
 
@@ -16,158 +17,141 @@ This project allows an LLM (like Claude) to interact with your Alexa shopping li
     - Mark an item as complete by name (`mark_item_completed`).
     - Mark an item as incomplete by name (`mark_item_incomplete`).
     - Check the status of the backend FastAPI server (`check_api_status`).
-- Uses Selenium **in a separate script** (`src/mcp/login.py`) to handle the initial Amazon login (including 2FA) and save authentication cookies.
-- The FastAPI server loads the saved cookies to make authenticated API calls to Alexa.
-- The MCP server communicates with the FastAPI server via local HTTP requests.
+- Uses Selenium **in a separate local script** (`src/mcp/login.py`) for initial Amazon login.
+- Cookies are **sent to and stored within** the Docker container's persistent volume.
+- The containerized FastAPI server loads the injected cookies for authenticated API calls.
+- The local MCP server communicates with the Dockerized FastAPI server.
 
 ## Prerequisites
 
-- Python 3.x
+- Python 3.x (for local scripts: login, MCP server)
+- Docker and Docker Compose (or Docker Desktop)
 - A virtual environment tool (like `venv`)
-- `pip` (or `uv` for faster installs)
-- **Google Chrome** (or another supported browser) installed on the host machine for the initial login step.
+- `pip` (or `uv`)
+- **Google Chrome** (or another supported browser) installed on the host machine for the login script.
 - An Amazon account with Alexa enabled.
 
-## Setup
+## Getting Started: Step-by-Step
 
-### 1. Clone the Repository
+Follow these steps in order to set up and run the system:
+
+**Step 1: Clone the Repository & Configure**
 
 ```bash
+# 1. Clone the repository
 # git clone <repository_url>
 cd alexa-mcp
+
+# 2. Create and configure your environment file
+cp .env.example .env
+# --> EDIT .env with your AMAZON_URL, etc. <--
 ```
 
-### 2. Create and Activate Virtual Environment
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-Install required packages into your activated virtual environment. Using `uv` is recommended for speed.
-
-```bash
-# Using uv (recommended)
-uv pip install -r requirements.txt
-
-# Or using pip
-# pip install -r requirements.txt
-```
-This installs `fastapi`, `uvicorn`, `requests`, `python-dotenv`, `selenium`, `webdriver-manager`, and `fastmcp`.
-
-### 4. Install Project in Editable Mode
-
-This allows imports within the project (like the FastAPI server importing `alexa_shopping_list` modules) to work correctly.
-
-```bash
-pip install -e .
-```
-
-### 5. Environment Variables
-
-Create a `.env` file in the project root. Populate it with:
-
+Key variables in `.env`:
 ```dotenv
 # Your local Amazon domain (e.g., amazon.com, amazon.co.uk)
 AMAZON_URL=https://www.amazon.com
 
-# Path where the login script will SAVE and the FastAPI server will READ the cookie file.
-# Ensure the directory exists if not using the current directory.
+# Path where the login script will TEMPORARILY save the cookie file before sending it.
 COOKIE_PATH=./alexa_cookie.pickle
 
 # Logging level for the scripts (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 LOG_LEVEL=INFO
 
-# Optional: Port for the FastAPI server
-# API_PORT=8000
+# Port the Dockerized API server will listen on INSIDE the container.
+# The login script needs this to know where to send the cookies.
+# This MUST match the port in the Dockerfile CMD.
+API_PORT=8000
+
+# Optional: Port to EXPOSE the API server on the HOST machine
+# Defaults to the internal API_PORT if not set in docker-compose.yml
+# HOST_API_PORT=8000
 ```
 
-### 6. Authentication (Cookie Generation - Run Once or When Needed)
+**Step 2: Build and Start the API Server Container**
 
-The system relies on a cookie file for authentication. You need to run the `login.py` script to handle the interactive browser login and generate this file.
-
-1.  **Configure `.env`:** Ensure your `.env` file is correctly set up with `AMAZON_URL` and `COOKIE_PATH`.
-2.  **Run the Login Script:** From your terminal (with the virtual environment activated) in the project root:
-    ```bash
-    python src/mcp/login.py
-    ```
-3.  **Browser Interaction:**
-    *   Follow the console prompts.
-    *   Selenium will open a browser window to your `AMAZON_URL`.
-    *   **MANUALLY** log in to your Amazon account (including 2FA).
-    *   Once logged in, return to the console and press `Enter`.
-4.  **Cookie Saved:** The script saves cookies to `COOKIE_PATH`.
-
-Run this whenever the cookie file is missing or expired (causing `401 Unauthorized` errors).
-
-## Running the System
-
-You need to run **two** components: the FastAPI server and the MCP server.
-
-### 1. Start the FastAPI Server
-
-In one terminal (with the virtual environment activated):
+This command builds the Docker image (if needed) and starts the FastAPI server container in the background. It uses the settings from your `.env` file.
 
 ```bash
-uvicorn src.api.main:app --reload --port 8000
+docker compose up --build -d alexa_api
 ```
-Keep this terminal running. You should see logs indicating the server is running on `http://127.0.0.1:8000`.
+- You only need to run `--build` the first time or after changing `Dockerfile` or `requirements.txt`.
+- Use `docker compose logs -f alexa_api` to view the container's logs.
+- Use `docker compose down` to stop the container when finished.
 
-### 2. Start the MCP Server
+**Step 3: Authenticate (Run Locally to Inject Cookies)**
 
-You have two main options:
+This local script interacts with your browser and sends authentication cookies to the running Docker container. **Run this step whenever you need to log in or refresh your credentials.** Running it again will overwrite the existing cookies in the container.
+
+```bash
+uv venv
+uv pip install -r requirements.txt
+python login.py
+```
+
+**Browser Interaction during `python login.py`:**
+*   Follow the console prompts.
+*   Selenium will open a browser window.
+*   **MANUALLY** log in to your Amazon account (including 2FA).
+*   Once logged in, return to the console and press `Enter`.
+*   Cookies are sent to the container. Check logs for confirmation.
+
+**Step 4: Run the MCP Server (Locally)**
+
+With the Dockerized API running and authenticated (Step 2 & 3 done), you can now run the MCP server locally to interact via Claude Desktop or other MCP clients.
 
 **Option A: Direct Execution (for Testing/Development)**
 
-In a *second* terminal (with the virtual environment activated):
+In a terminal (with the virtual environment activated):
 
 ```bash
+source .venv/bin/activate
 python src/mcp/mcp_server.py
 ```
-This runs the MCP server directly, typically using stdio for communication. It's useful for simple testing but won't integrate with Claude Desktop.
 
 **Option B: Claude Desktop Integration**
 
-Configure Claude Desktop to run the MCP server script using your virtual environment's Python interpreter.
+Configure Claude Desktop to run the *local* MCP server script using your virtual environment's Python interpreter.
 
-1.  **Find `mcp.json`:** Locate the configuration file used by Claude Desktop (e.g., in `~/.config/claude/`, `~/Library/Application Support/Claude/`).
-2.  **Add/Edit Server Entry:** Ensure you have an entry for your Alexa server configured like this:
+1.  **Find `mcp.json`:** Locate the configuration file.
+2.  **Add/Edit Server Entry:**
 
     ```json
     {
       "servers": [
         {
-          "name": "Alexa Shopping List", // Or your preferred name
+          "name": "Alexa Shopping List (Docker Backend)",
           "type": "stdio",
-          "command": "/path/to/your/project/alexa-mcp/.venv/bin/python", // <-- ABSOLUTE path to venv python
+          "command": "/path/to/your/project/alexa-mcp/.venv/bin/python", // <-- ABSOLUTE path
           "args": [
-            "/path/to/your/project/alexa-mcp/src/mcp/mcp_server.py" // <-- ABSOLUTE path to the MCP script
+            "/path/to/your/project/alexa-mcp/src/mcp/mcp_server.py" // <-- ABSOLUTE path
           ],
-          "workingDirectory": "/path/to/your/project/alexa-mcp" // <-- ABSOLUTE path to project root
-          // Add other relevant config if needed
+          "workingDirectory": "/path/to/your/project/alexa-mcp" // <-- ABSOLUTE path
         }
         // ... other servers ...
       ]
     }
     ```
-    **Important:** Replace `/path/to/your/project/alexa-mcp` with the actual, absolute path to your project directory. Set the `workingDirectory` so the script can find relative paths like the `.env` file and `COOKIE_PATH`.
+    **Important:** Replace `/path/to/your/project/alexa-mcp` with the actual, absolute path.
 
-3.  **Restart Claude Desktop:** If it was running, restart it to load the new configuration.
-4.  **Activate Tool:** Use the "Alexa Shopping List" tool within Claude. It should now connect to the running MCP server process.
-
-*(Note: The `fastmcp install` command was previously used but proved unreliable due to environment issues. Direct configuration in `mcp.json` is the recommended approach for Claude Desktop.)*
+3.  **Restart Claude Desktop:** If running, restart it.
+4.  **Activate Tool:** Use the tool in Claude.
 
 ## Troubleshooting
 
 - **MCP Server Fails to Start (Claude Desktop):**
-    - **`spawn ... ENOENT` Error:** Double-check the absolute paths for `command` and `args` in `mcp.json`. Ensure the `.venv/bin/python` file actually exists. Verify the `workingDirectory` is correct.
-    - **Immediate Disconnect:** Ensure the FastAPI server is running *before* activating the tool in Claude. Check the FastAPI server logs for errors during startup or when the MCP server tries the initial health check. Ensure the MCP server process launched by Claude has permissions to read files/make network connections.
-- **Tools Return Empty Lists or Errors:**
-    - **`401 Unauthorized` in FastAPI logs:** The cookie is invalid or expired. Re-run `python src/mcp/login.py`.
-    - **Connection Error in MCP logs:** The FastAPI server is not running or not accessible at `http://127.0.0.1:8000`. Check the FastAPI terminal.
-    - **Other FastAPI Errors:** Check the FastAPI server logs for specific Python exceptions or error messages from the `alexa_shopping_list` modules.
-- **Login Script (`login.py`) Errors:**
-    - **WebDriver Errors:** Ensure Google Chrome is installed/updated. `webdriver-manager` should handle drivers, but check its logs or try clearing its cache (`~/.wdm`).
-    - **Cookie Extraction Failure:** Complete the login fully in the browser before pressing Enter in the console.
+    - **`spawn ... ENOENT`:** Check absolute paths in `mcp.json`.
+    - **Immediate Disconnect:** Ensure `alexa_api` container is running. Check MCP/container logs. Ensure MCP can reach API (usually `http://localhost:8000`).
+- **API Container Fails to Start or Errors:**
+    - Check logs: `docker compose logs alexa_api`.
+    - **Configuration Errors:** Ensure `.env` exists and is read by `docker-compose.yml` via `env_file`.
+    - **Import Errors:** Verify `COPY` in `Dockerfile` & `PYTHONPATH`.
+    - **Port Conflicts:** Ensure host port `8000` (or `HOST_API_PORT`) is free.
+- **Tools Return Errors / Authentication Issues:**
+    - **`401 Unauthorized` / `Cookie not found`:** Run the local login script (`python login.py`) again.
+    - **Connection Error in MCP logs:** The `alexa_api` container is not running or not accessible from the MCP server.
+- **Local Login Script (`login.py` at root) Errors:**
+    - **WebDriver Errors:** Ensure Google Chrome is installed/updated locally.
+    - **Cookie Extraction Failure:** Complete the browser login fully before pressing Enter.
+    - **API Connection Error:** Verify `alexa_api` container is running and accessible at `http://localhost:8000` (or configured `API_PORT`). Check container logs (`docker compose logs alexa_api`).
+    - **API 4xx/5xx Errors during upload:** Check `alexa_api` container logs for details.

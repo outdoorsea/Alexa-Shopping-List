@@ -2,6 +2,8 @@ import sys
 import os
 import logging
 from typing import List, Dict, Any
+import pickle # Needed for saving cookies
+import shutil # Needed for saving uploaded file
 
 # --- Path Modification ---
 # Add the project root directory to the Python path
@@ -11,7 +13,7 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 # --- End Path Modification ---
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field  # For request body validation
 
 # Import necessary components from your existing code
@@ -187,6 +189,60 @@ async def mark_item_incomplete_endpoint(item_data: ItemNameModel):
         logger.error(f"Failed to mark item '{item_name}' incomplete via Alexa API.")
         raise HTTPException(status_code=500, detail=f"Failed to mark item '{item_name}' as incomplete.")
     return {"message": f"Item '{item_name}' marked as incomplete."}
+
+# --- Authentication Endpoint ---
+@app.post("/auth/cookies", tags=["Authentication"], status_code=200)
+async def upload_cookies(cookies_file: UploadFile = File(...)):
+    """Accepts a cookies.pkl file upload and saves it to the persistent data volume."""
+    # Ensure the data directory exists (Docker should create it, but double-check)
+    data_dir = os.path.join(project_root, 'data') # Using project_root might be wrong inside Docker, adjust path
+    # Let's use an absolute path within the container where the volume is mounted
+    data_dir_container = "/app/data" # Matches volume mount in docker-compose
+    cookie_path = os.path.join(data_dir_container, "cookies.pkl")
+
+    logger.info(f"Attempting to save uploaded cookie file to: {cookie_path}")
+
+    # Create directory if it doesn't exist
+    try:
+        os.makedirs(data_dir_container, exist_ok=True)
+    except OSError as e:
+        logger.error(f"Could not create data directory '{data_dir_container}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Server error: Could not create data directory.")
+
+    try:
+        # Save the uploaded file to the target path
+        with open(cookie_path, "wb") as buffer:
+            shutil.copyfileobj(cookies_file.file, buffer)
+
+        # Optional: Basic validation - try loading the pickle file
+        try:
+            with open(cookie_path, 'rb') as f:
+                _ = pickle.load(f)
+            logger.info(f"Successfully saved and validated cookie file to {cookie_path}")
+            return {"message": "Cookie file uploaded and saved successfully."}
+        except pickle.UnpicklingError as e:
+            logger.error(f"Uploaded file at {cookie_path} is not a valid pickle file: {e}")
+            # Clean up invalid file
+            try:
+                os.remove(cookie_path)
+            except OSError:
+                pass
+            raise HTTPException(status_code=400, detail="Invalid pickle file uploaded.")
+        except Exception as e:
+            logger.error(f"Error loading saved pickle file {cookie_path}: {e}", exc_info=True)
+            # Clean up potentially corrupt file
+            try:
+                os.remove(cookie_path)
+            except OSError:
+                pass
+            raise HTTPException(status_code=500, detail="Server error: Could not validate saved cookie file.")
+
+    except Exception as e:
+        logger.error(f"Failed to save uploaded file to {cookie_path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {e}")
+    finally:
+        # Ensure the uploaded file resource is closed
+        await cookies_file.close()
 
 # --- Optional: Add main block to run with uvicorn for direct execution ---
 if __name__ == "__main__":

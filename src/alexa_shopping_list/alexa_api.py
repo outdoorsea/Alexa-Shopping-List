@@ -23,6 +23,11 @@ DEFAULT_HEADERS = {
 }
 
 # --- Cookie Handling ---
+
+# Hardcoded path for cookie loading *within the container*
+# This assumes the /auth/cookies endpoint saves the file here.
+CONTAINER_COOKIE_PATH = "/app/data/cookies.pkl"
+
 def load_cookies_from_file(cookie_file_path: str) -> Optional[Dict[str, str]]:
     """Loads cookies from a pickle file."""
     try:
@@ -57,17 +62,18 @@ def load_cookies_from_file(cookie_file_path: str) -> Optional[Dict[str, str]]:
 # --- API Request Function ---
 def make_authenticated_request(
     url: str,
-    cookie_file_path: str,
+    # cookie_file_path: str, # No longer needed as parameter
     method: str = 'GET',
     payload: Optional[Dict[str, Any]] = None
 ) -> Optional[requests.Response]:
-    """Makes an authenticated request using cookies from the specified file."""
+    """Makes an authenticated request using cookies from the fixed container path."""
     try:
         session = requests.Session()
         session.headers.update(DEFAULT_HEADERS)
-        cookies = load_cookies_from_file(cookie_file_path)
+        # Always load from the container path
+        cookies = load_cookies_from_file(CONTAINER_COOKIE_PATH)
         if not cookies:
-            logger.error("No cookies loaded for authenticated request.")
+            logger.error(f"No cookies loaded from {CONTAINER_COOKIE_PATH} for authenticated request.")
             return None
         session.cookies.update(cookies)
 
@@ -117,7 +123,8 @@ def filter_incomplete_items(list_items: List[Dict[str, Any]]) -> List[Dict[str, 
 def get_shopping_list_items(config: AppConfig) -> Optional[List[Dict[str, Any]]]:
     """Gets all items from the Alexa shopping list."""
     list_items_url = f"{config.amazon_url}/alexashoppinglists/api/getlistitems"
-    response = make_authenticated_request(list_items_url, config.cookie_path)
+    # Pass the config but the function now ignores the cookie_path within it
+    response = make_authenticated_request(list_items_url, method='GET')
     if response:
         try:
             response_data = response.json()
@@ -144,7 +151,7 @@ def add_shopping_list_item(config: AppConfig, item_value: str) -> bool:
 
     response = make_authenticated_request(
         url,
-        config.cookie_path,
+        # config.cookie_path, # Removed
         method='POST', # Assuming POST for creation
         payload=payload
     )
@@ -181,7 +188,7 @@ def delete_shopping_list_item(config: AppConfig, list_item: Dict[str, Any]) -> b
     # Send the item dict (containing ID) as payload
     response = make_authenticated_request(
         url,
-        config.cookie_path,
+        # config.cookie_path, # Removed
         method='DELETE',
         payload=list_item # Send the whole item dict
     )
@@ -203,7 +210,7 @@ def unmark_item_as_completed(config: AppConfig, list_item: Dict[str, Any]) -> bo
     return _update_item_completion_status(config, list_item, completed_status=False)
 
 def _update_item_completion_status(config: AppConfig, list_item: Dict[str, Any], completed_status: bool) -> bool:
-    """Internal helper to mark or unmark an item as completed."""
+    """Internal helper to update the completed status of an item."""
     item_value = list_item.get('value', 'unknown')
     action = "Marking" if completed_status else "Unmarking"
     action_past = "marked" if completed_status else "unmarked"
@@ -215,7 +222,7 @@ def _update_item_completion_status(config: AppConfig, list_item: Dict[str, Any],
 
     response = make_authenticated_request(
         url,
-        config.cookie_path,
+        # config.cookie_path, # Removed
         method='PUT',
         payload=list_item_copy
     )
