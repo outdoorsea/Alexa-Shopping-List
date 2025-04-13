@@ -15,6 +15,12 @@ if project_root not in sys.path:
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field  # For request body validation
 
+# --- Scheduler Imports ---
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from contextlib import asynccontextmanager
+import asyncio # For potential sleep in task
+# --- End Scheduler Imports ---
+
 # Import necessary components using relative imports
 try:
     # Use the new local config
@@ -51,11 +57,49 @@ if api_config.LOG_LEVEL_INT > logging.DEBUG:
     logging.getLogger("webdriver_manager").setLevel(logging.WARNING) # Likely not needed here
     logger.debug("Suppressed noisy library logs.")
 
+# --- Scheduler Setup ---
+scheduler = AsyncIOScheduler()
+
+async def perform_keep_alive():
+    """Task to periodically fetch shopping list to keep session active."""
+    logger.info("Keep-alive task started: Attempting to fetch shopping list...")
+
+    # Check if cookies exist before attempting the request
+    cookie_path = api_config.COOKIE_PATH
+    if not os.path.exists(cookie_path):
+        logger.info(f"Keep-alive skipped: Cookie file not found at {cookie_path}. Login required.")
+        return # Skip this interval
+
+    try:
+        # Call the function that gets all items, which uses make_authenticated_request
+        items = get_shopping_list_items()
+        if items is not None:
+            logger.info(f"Keep-alive successful: Fetched {len(items)} items.")
+        else:
+            # This likely means cookies are invalid/expired or another API error occurred
+            logger.warning("Keep-alive failed: Could not retrieve shopping list (cookies might be expired). Re-authentication needed.")
+    except Exception as e:
+        # Catch any unexpected error during the keep-alive attempt
+        logger.error(f"Keep-alive task encountered an unexpected error: {e}", exc_info=True)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("Starting keep-alive scheduler...")
+    # Schedule the job to run every 60 seconds
+    scheduler.add_job(perform_keep_alive, 'interval', seconds=60, id='keep_alive_job')
+    scheduler.start()
+    yield
+    # Shutdown
+    logger.info("Shutting down keep-alive scheduler...")
+    scheduler.shutdown()
+
 # --- FastAPI App Instance ---
 app = FastAPI(
     title="Alexa Shopping List API",
     description="API to interact with an Alexa Shopping List using pre-generated cookies.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan # Add the lifespan manager
 )
 
 # --- Helper Function ---
@@ -227,7 +271,7 @@ async def receive_cookies(cookies_data: List[CookieModel]): # Expect a list of C
 # --- Optional: Add main block to run with uvicorn for direct execution ---
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting Uvicorn server directly for development...")
+    logger.info("Starting Uvicorn server directly for development (keep-alive active)...")
     # Note: Host '0.0.0.0' makes it accessible on your network
     # Use '127.0.0.1' for local access only
     # Reload=True is for development, disable for production

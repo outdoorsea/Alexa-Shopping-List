@@ -127,19 +127,6 @@ async def main():
                 # Filter out None values if necessary, or handle expires conversion
                 serializable_cookies.append({k: v for k, v in cookie_dict.items() if v is not None})
 
-            # Save the serializable cookies locally for inspection
-            try:
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-                # Define output dir here if needed just for cookies
-                cookie_output_dir = Path("src/auth/output")
-                cookie_output_dir.mkdir(parents=True, exist_ok=True)
-                save_path = cookie_output_dir / f"manual_cookies_extracted_{timestamp}.json"
-                with open(save_path, "w", encoding="utf-8") as f:
-                    json.dump(serializable_cookies, f, indent=2)
-                logger.info(f"Saved extracted cookies (serializable format) to: {save_path}")
-            except Exception as save_err:
-                logger.error(f"Failed to save extracted cookies locally: {save_err}")
-
             logger.info(f"Formatted {len(serializable_cookies)} cookies for JSON.")
             # Send the *serializable* list to the API
             cookie_upload_success = await post_cookies_to_api(serializable_cookies)

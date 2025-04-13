@@ -1,6 +1,8 @@
 # Alexa Shopping List MCP Server
 
-Interact with your Alexa shopping list via MCP. Uses a Dockerized API backend and local scripts for login and MCP communication.
++![Example Usage in Claude Desktop](assets/mcp.png)
++
+ Interact with your Alexa shopping list via MCP. Uses a Dockerized API backend and local scripts for login and MCP communication.
 
 ## Components
 
@@ -78,6 +80,8 @@ Verify the API server received the cookies and can access your list by opening t
 [http://127.0.0.1:8000/items/all](http://127.0.0.1:8000/items/all)
 
 You should see a JSON response containing your current Alexa shopping list items. If you get an error (like 401 Unauthorized or 503 Service Unavailable), check the API logs (`docker compose logs alexa_api`) and potentially rerun steps 5 & 6.
+
+*   **API Documentation:** FastAPI automatically generates interactive documentation. You can explore all available endpoints and test them directly in your browser at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
 ## Troubleshooting
 
