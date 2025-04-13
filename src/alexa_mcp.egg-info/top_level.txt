@@ -1,0 +1,3 @@
+alexa_shopping_list
+api
+mcp

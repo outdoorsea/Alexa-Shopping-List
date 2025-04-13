@@ -1,3 +1,4 @@
+#!/Users/sethrose/Developer/github/Temp/alexa-mcp/.venv/bin/python
 import sys
 import os
 import logging
@@ -206,39 +207,39 @@ def check_api_status() -> dict:
 # --- Run Server ---
 if __name__ == "__main__":
     logger.info("Starting FastMCP server...")
-    print("--- MCP Server: Starting ---", file=sys.stderr); sys.stderr.flush()
+    print("--- MCP Server (Root): Starting ---", file=sys.stderr); sys.stderr.flush()
 
     # Initial API health check with added error handling
     try:
-        print("--- MCP Server: Performing initial API health check... ---", file=sys.stderr); sys.stderr.flush()
+        print("--- MCP Server (Root): Performing initial API health check... ---", file=sys.stderr); sys.stderr.flush()
         status = check_api_status()
         if status.get("status") == "ERROR":
             logger.warning(f"WARNING: {status.get('message')}. Some tools may not work correctly.")
-            print(f"--- MCP Server WARNING: FastAPI server not accessible during initial check: {status.get('message')} ---", file=sys.stderr)
+            print(f"--- MCP Server (Root) WARNING: FastAPI server not accessible during initial check: {status.get('message')} ---", file=sys.stderr)
             sys.stderr.flush()
         else:
-            print("--- MCP Server: Initial API health check successful. ---", file=sys.stderr); sys.stderr.flush()
+            print("--- MCP Server (Root): Initial API health check successful. ---", file=sys.stderr); sys.stderr.flush()
     except Exception as initial_check_error:
         # Catch any unexpected error during the initial check itself
-        print(f"--- MCP Server FATAL ERROR during initial API check: {initial_check_error} ---", file=sys.stderr)
+        print(f"--- MCP Server (Root) FATAL ERROR during initial API check: {initial_check_error} ---", file=sys.stderr)
         logger.exception(f"Fatal error during initial API status check: {initial_check_error}")
         import traceback
         traceback.print_exc(file=sys.stderr)
         sys.stderr.flush()
         # Optionally, decide whether to exit here or let mcp.run() potentially fail later
         # For now, we'll log the error and continue to mcp.run()
-        print("--- MCP Server: Proceeding to mcp.run() despite initial check error. ---", file=sys.stderr); sys.stderr.flush()
+        print("--- MCP Server (Root): Proceeding to mcp.run() despite initial check error. ---", file=sys.stderr); sys.stderr.flush()
 
     try:
-        print("--- MCP Server: Entering mcp.run() ---", file=sys.stderr); sys.stderr.flush()
+        print("--- MCP Server (Root): Entering mcp.run() ---", file=sys.stderr); sys.stderr.flush()
         mcp.run()
     except Exception as e:
-        print(f"--- MCP Server FATAL ERROR: Exception from mcp.run(): {e} ---", file=sys.stderr)
+        print(f"--- MCP Server (Root) FATAL ERROR: Exception from mcp.run(): {e} ---", file=sys.stderr)
         logger.exception(f"Exception from mcp.run(): {e}")  # Log with traceback via logger
         import traceback
         traceback.print_exc(file=sys.stderr)  # Also print traceback directly
         sys.stderr.flush()
         sys.exit(1)  # Ensure exit on error from run
     finally:
-        print("--- MCP Server: mcp.run() exited ---", file=sys.stderr); sys.stderr.flush()
+        print("--- MCP Server (Root): mcp.run() exited ---", file=sys.stderr); sys.stderr.flush()
         logger.info("FastMCP server finished.")
