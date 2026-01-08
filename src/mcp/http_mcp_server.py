@@ -197,6 +197,21 @@ def make_api_request(method: str, endpoint: str, json_data: Optional[Dict] = Non
             error_detail = response.json().get("detail", str(e))
         except (ValueError, AttributeError):
             error_detail = str(e)
+
+        # Enhanced error message for authentication failures
+        if response.status_code == 401 or "Unauthorized" in str(e) or "401" in str(e):
+            return {
+                "error": "Amazon authentication expired. Please re-authenticate.",
+                "authentication_required": True,
+                "instructions": "To re-authenticate:\n1. Open terminal\n2. Run: cd ~/Alexa-Shopping-List && ./login.sh\n3. Log in to Amazon when browser opens\n4. Press Enter after successful login\n\nNote: Amazon cookies expire periodically and require manual browser login."
+            }
+        elif "Could not retrieve shopping list" in error_detail or "shopping list" in error_detail.lower():
+            return {
+                "error": "Cannot access Alexa shopping list - authentication may have expired.",
+                "authentication_required": True,
+                "instructions": "To re-authenticate:\n1. Open terminal\n2. Run: cd ~/Alexa-Shopping-List && ./login.sh\n3. Log in to Amazon when browser opens\n4. Press Enter after successful login"
+            }
+
         return {"error": error_detail}
     except requests.exceptions.Timeout as e:
         logger.error(f"Timeout: {e}")
@@ -219,17 +234,29 @@ def execute_tool_logic(tool_name: str, parameters: Dict[str, Any]) -> Dict[str, 
             output = result if isinstance(result, list) else result
             error = result.get("error") if not success else None
 
+            # Include authentication instructions if auth failed
+            if not success and result.get("authentication_required"):
+                error = f"{error}\n\n{result.get('instructions', '')}"
+
         elif tool_name == "get_incomplete_shopping_items":
             result = make_api_request("GET", "/items/incomplete")
             success = "error" not in result
             output = result if isinstance(result, list) else result
             error = result.get("error") if not success else None
 
+            # Include authentication instructions if auth failed
+            if not success and result.get("authentication_required"):
+                error = f"{error}\n\n{result.get('instructions', '')}"
+
         elif tool_name == "get_completed_shopping_items":
             result = make_api_request("GET", "/items/completed")
             success = "error" not in result
             output = result if isinstance(result, list) else result
             error = result.get("error") if not success else None
+
+            # Include authentication instructions if auth failed
+            if not success and result.get("authentication_required"):
+                error = f"{error}\n\n{result.get('instructions', '')}"
 
         elif tool_name == "add_shopping_item":
             item_name = parameters.get("item_name")
@@ -253,17 +280,23 @@ def execute_tool_logic(tool_name: str, parameters: Dict[str, Any]) -> Dict[str, 
 
                 api_result = make_api_request("POST", "/items", {"item_name": name.strip()})
                 item_success = "error" not in api_result
+
+                # Enhanced error message with auth instructions if needed
+                message = api_result.get("message", api_result.get("error", "Unknown result"))
+                if not item_success and api_result.get("authentication_required"):
+                    message = f"{message}\n\n{api_result.get('instructions', '')}"
+
                 results.append({
                     "item": name.strip(),
                     "success": item_success,
-                    "message": api_result.get("message", api_result.get("error", "Unknown result"))
+                    "message": message
                 })
                 if not item_success:
                     all_succeeded = False
 
             success = all_succeeded
             output = {"results": results}
-            error = None if success else "Some items failed to add"
+            error = None if success else "Some items failed to add. Check individual results for details."
 
         elif tool_name == "delete_shopping_item":
             item_name = parameters.get("item_name")
