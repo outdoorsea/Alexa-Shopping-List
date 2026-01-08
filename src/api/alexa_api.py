@@ -130,14 +130,104 @@ def extract_list_items(response_data: Dict[str, Any]) -> Optional[List[Dict[str,
     logger.debug(f"Full response keys: {list(response_data.keys())}")
     return None
 
+def extract_list_metadata(response_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Extracts list metadata from the API response."""
+    for key in response_data.keys():
+        if isinstance(response_data[key], dict):
+            list_data = response_data[key]
+            # Look for list metadata
+            metadata = {}
+            if 'listId' in list_data:
+                metadata['listId'] = list_data['listId']
+            if 'name' in list_data:
+                metadata['name'] = list_data['name']
+            if 'nbestItems' in list_data:
+                metadata['nbestItems'] = list_data['nbestItems']
+            if metadata:
+                logger.debug(f"Extracted list metadata: {metadata}")
+                return metadata
+    return None
+
 def filter_incomplete_items(list_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Filters a list of items to include only those not marked completed."""
     return [item for item in list_items if not item.get('completed', False)]
 
-def get_shopping_list_items() -> Optional[List[Dict[str, Any]]]:
-    """Gets all items from the Alexa shopping list."""
+def get_all_shopping_lists() -> Optional[List[Dict[str, Any]]]:
+    """Gets all available Alexa shopping lists by extracting unique list IDs from items."""
+    # Since the API doesn't have a direct getlists endpoint, we'll extract unique lists from items
+    logger.info("Getting all shopping lists by extracting from items...")
+
+    # First get items from the default endpoint (no list_id parameter)
     list_items_url = f"{api_config.AMAZON_URL}/alexashoppinglists/api/getlistitems"
-    # Pass the config but the function now ignores the cookie_path within it
+    response = make_authenticated_request(list_items_url, method='GET')
+
+    if not response:
+        logger.error("Failed to retrieve data to extract list information.")
+        return None
+
+    try:
+        response_data = response.json()
+        # Try to extract list metadata first
+        list_metadata = extract_list_metadata(response_data)
+        items = extract_list_items(response_data)
+
+        if items is None:
+            logger.error("Failed to extract items from response.")
+            return None
+
+        # Extract unique lists from items
+        lists_dict = {}
+        for item in items:
+            list_id = item.get('listId')
+            if list_id and list_id not in lists_dict:
+                # Create a list object with basic info
+                lists_dict[list_id] = {
+                    'listId': list_id,
+                    'name': None,  # Will try to get from metadata
+                    'customerId': item.get('customerId'),
+                    'itemCount': 0,
+                    'incompleteCount': 0,
+                    'completedCount': 0,
+                    'isPrimary': False
+                }
+
+                # If we have metadata for this list, add the name
+                if list_metadata and list_metadata.get('listId') == list_id:
+                    lists_dict[list_id]['name'] = list_metadata.get('name', 'Shopping List')
+                    lists_dict[list_id]['isPrimary'] = True
+
+            # Update counts
+            if list_id in lists_dict:
+                lists_dict[list_id]['itemCount'] += 1
+                if item.get('completed', False):
+                    lists_dict[list_id]['completedCount'] += 1
+                else:
+                    lists_dict[list_id]['incompleteCount'] += 1
+
+        # If we only have one list and no name was found, assume it's "Shopping List"
+        if len(lists_dict) == 1:
+            for list_data in lists_dict.values():
+                if list_data['name'] is None:
+                    list_data['name'] = 'Shopping List'
+                    list_data['isPrimary'] = True
+
+        result = list(lists_dict.values())
+        # Sort so primary list comes first
+        result.sort(key=lambda x: (not x.get('isPrimary', False), x.get('name', '')))
+        logger.info(f"Found {len(result)} unique shopping lists.")
+        return result
+
+    except requests.exceptions.JSONDecodeError as e:
+        logger.error(f"Failed to decode JSON response: {e}")
+        return None
+
+def get_shopping_list_items(list_id: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
+    """Gets all items from the Alexa shopping list. If list_id is provided, gets items from that specific list."""
+    if list_id:
+        list_items_url = f"{api_config.AMAZON_URL}/alexashoppinglists/api/getlistitems?listId={list_id}"
+    else:
+        list_items_url = f"{api_config.AMAZON_URL}/alexashoppinglists/api/getlistitems"
+
     response = make_authenticated_request(list_items_url, method='GET')
     if response:
         try:
@@ -155,8 +245,20 @@ def get_shopping_list_items() -> Optional[List[Dict[str, Any]]]:
 def add_shopping_list_item(item_value: str) -> bool:
     """Adds a new item to the Alexa shopping list."""
     logger.info(f"Adding item to shopping list: {item_value}")
-    # Use the correct endpoint from documentation
-    add_item_path = "/alexashoppinglists/api/addlistitem/YW16bjEuYWNjb3VudC5BSERXNEkyVE00U1I0UVQ2VUpINzNWUVpaQU5BLVNIT1BQSU5HX0lURU0="
+
+    # Get the list ID dynamically from existing items
+    items = get_shopping_list_items()
+    if not items or len(items) == 0:
+        logger.error("Cannot add item: No existing items found to determine list ID")
+        return False
+
+    list_id = items[0].get('listId')
+    if not list_id:
+        logger.error("Cannot add item: Could not extract list ID from existing items")
+        return False
+
+    logger.debug(f"Using list ID: {list_id}")
+    add_item_path = f"/alexashoppinglists/api/addlistitem/{list_id}"
     url = f"{api_config.AMAZON_URL}{add_item_path}"
     payload = {
         "value": item_value,
@@ -165,8 +267,7 @@ def add_shopping_list_item(item_value: str) -> bool:
 
     response = make_authenticated_request(
         url,
-        # config.cookie_path, # Removed
-        method='POST', # Assuming POST for creation
+        method='POST',
         payload=payload
     )
 

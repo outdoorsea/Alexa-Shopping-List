@@ -7,19 +7,24 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Add the root app directory to PYTHONPATH so src.* imports work
 ENV PYTHONPATH="/app"
 
-# Install tini for proper signal handling
-RUN apt-get update && apt-get install -y --no-install-recommends tini \
+# Install system dependencies including Chromium for nodriver
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tini \
+    chromium \
+    chromium-driver \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy only the API requirements file first to leverage Docker cache
-COPY src/api/requirements.txt ./
+# Copy all requirements files first to leverage Docker cache
+COPY src/api/requirements.txt ./api-requirements.txt
+COPY src/auth/requirements.txt ./auth-requirements.txt
 
-# Install API Python dependencies
+# Install all Python dependencies
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir -r api-requirements.txt \
+    && pip install --no-cache-dir -r auth-requirements.txt
 
 # Copy the entire src directory which contains api, mcp, auth
 # The API needs access to shared modules like config if they exist at the src level

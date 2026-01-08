@@ -27,6 +27,7 @@ try:
     from . import config as api_config # Alias to avoid name clashes
     from .alexa_api import ( # Relative import
         get_shopping_list_items,
+        get_all_shopping_lists,
         add_shopping_list_item,
         delete_shopping_list_item,
         mark_item_as_completed,
@@ -135,9 +136,29 @@ async def read_root():
     """Simple health check endpoint."""
     return {"status": "Alexa Shopping List API is running"}
 
+@app.get("/lists", tags=["Lists"], response_model=List[Dict[str, Any]])
+async def get_all_lists():
+    """Retrieves all available shopping lists."""
+    logger.info("Endpoint GET /lists called.")
+    lists = get_all_shopping_lists()
+    if lists is None:
+        logger.error("Failed to retrieve lists from Alexa API.")
+        raise HTTPException(status_code=503, detail="Could not retrieve shopping lists from Alexa.")
+    return lists
+
+@app.get("/lists/{list_id}/items", tags=["Lists"], response_model=List[Dict[str, Any]])
+async def get_list_items_by_id(list_id: str):
+    """Retrieves all items from a specific shopping list by list ID."""
+    logger.info(f"Endpoint GET /lists/{list_id}/items called.")
+    items = get_shopping_list_items(list_id=list_id)
+    if items is None:
+        logger.error(f"Failed to retrieve items for list {list_id} from Alexa API.")
+        raise HTTPException(status_code=503, detail=f"Could not retrieve items for list {list_id} from Alexa.")
+    return items
+
 @app.get("/items/all", tags=["Items"], response_model=List[Dict[str, Any]])
 async def get_all_list_items():
-    """Retrieves all items (completed and incomplete) from the shopping list."""
+    """Retrieves all items (completed and incomplete) from the default shopping list."""
     logger.info("Endpoint GET /items/all called.")
     items = get_shopping_list_items()
     if items is None:

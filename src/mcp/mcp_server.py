@@ -100,11 +100,63 @@ def make_api_request(method: str, endpoint: str, json_data: Optional[Dict] = Non
 # These now proxy requests to our FastAPI server
 
 @mcp.tool()
+def get_all_shopping_lists() -> list[dict]:
+    """
+    Retrieves all available Alexa shopping lists.
+    Returns a list of dictionaries, where each dictionary represents a list and includes:
+    - listId: Unique identifier for the list
+    - name: Name of the list (e.g., "Shopping List", "To-Do List")
+    - isPrimary: True for the main "Shopping List"
+    - itemCount, incompleteCount, completedCount: Item statistics
+
+    The primary "Shopping List" will always be returned first.
+    This is useful for discovering what lists are available before retrieving items from a specific list.
+    An empty list is returned if no lists are found or an error occurs.
+    """
+    logger.info("Tool 'get_all_shopping_lists' called.")
+    response = make_api_request("GET", "/lists")
+
+    if "error" in response:
+        logger.error(f"Error in get_all_shopping_lists: {response['error']}")
+        return []  # Return empty list on error
+
+    # Make sure we return a list even if API somehow returns something else
+    if isinstance(response, list):
+        return response
+    else:
+        logger.warning(f"Unexpected response format from API, expected list but got: {type(response)}")
+        return []
+
+@mcp.tool()
+def get_items_from_list(list_id: str) -> list[dict]:
+    """
+    Retrieves all items from a specific Alexa shopping list by its list ID.
+    Use get_all_shopping_lists() first to discover available list IDs.
+    Returns a list of dictionaries, where each dictionary represents an item and includes keys like 'id', 'value', 'listId', and 'completed'.
+    An empty list is returned if the list is empty or an error occurs.
+    """
+    logger.info(f"Tool 'get_items_from_list' called with list_id: {list_id}")
+    response = make_api_request("GET", f"/lists/{list_id}/items")
+
+    if "error" in response:
+        logger.error(f"Error in get_items_from_list for list {list_id}: {response['error']}")
+        return []  # Return empty list on error
+
+    # Make sure we return a list even if API somehow returns something else
+    if isinstance(response, list):
+        return response
+    else:
+        logger.warning(f"Unexpected response format from API, expected list but got: {type(response)}")
+        return []
+
+@mcp.tool()
 def get_all_items() -> list[dict]:
     """
-    Retrieves all items currently on the Alexa shopping list, including both active (incomplete) and completed items.
+    Retrieves all items currently on the primary "Shopping List", including both active (incomplete) and completed items.
     Returns a list of dictionaries, where each dictionary represents an item and includes keys like 'id', 'value', and 'completed'.
     An empty list is returned if the shopping list is empty or an error occurs.
+
+    Note: This retrieves items from the main Shopping List. Use get_items_from_list(list_id) to access other lists.
     """
     logger.info("Tool 'get_all_items' called.")
     response = make_api_request("GET", "/items/all")

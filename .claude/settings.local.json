@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose:*)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(uv pip install:*)",
+      "Bash(open:*)",
+      "Bash(python3:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m src.auth.login:*)",
+      "Bash(chmod:*)",
+      "Bash(./test.sh:*)",
+      "Bash(curl:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
